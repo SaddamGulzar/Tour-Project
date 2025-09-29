@@ -6,15 +6,14 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-vm:
+    name: Deploy to Remote VM (Zero Downtime)
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Copy project to remote VM
       - name: Copy project to remote VM
         uses: appleboy/scp-action@v0.1.5
         with:
@@ -25,7 +24,6 @@ jobs:
           source: "."
           target: "~/tour-project"
 
-      # Deploy Docker container on VM
       - name: Deploy Docker container on remote VM
         uses: appleboy/ssh-action@v0.1.5
         with:
@@ -36,21 +34,33 @@ jobs:
           script: |
             cd ~/tour-project
 
-            # Stop & remove any container named 'tour-project' (running or stopped)
-            CONTAINER_ID=$(docker ps -aq -f name=tour-project)
-            if [ -n "$CONTAINER_ID" ]; then
-              echo "Stopping existing container..."
-              docker stop tour-project || true
-              docker rm tour-project || true
-            fi
-
             # Build new Docker image
             echo "Building Docker image..."
             docker build -t tour-project:latest .
 
-            # Run container on port 8088
-            echo "Running new container..."
-            docker run -d --name tour-project -p 8088:8088 tour-project:latest
+            # Run new container on temporary port 8089
+            echo "Starting new container..."
+            docker run -d --name tour-project-temp -p 8089:8088 tour-project:latest
 
-            # Optional: clean up dangling images
-            docker image prune -f
+            # Wait a few seconds for the container to initialize
+            echo "Waiting for container to start..."
+            sleep 5
+
+            # Stop & remove old container if exists
+            OLD_CONTAINER=$(docker ps -q -f name=tour-project)
+            if [ -n "$OLD_CONTAINER" ]; then
+              echo "Stopping old container..."
+              docker stop tour-project || true
+              docker rm tour-project || true
+            fi
+
+            # Rename the new container to the production name
+            docker rename tour-project-temp tour-project
+
+            # Optional: prune old images, keeping only the latest 3
+            echo "Pruning old Docker images..."
+            docker images -q tour-project | tail -n +4 | xargs -r docker rmi -f
+
+            # Show logs of the new container
+            echo "New container logs:"
+            docker logs tour-project --tail 20
