@@ -1,0 +1,42 @@
+name: CI/CD Tour-Project
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build Docker image
+      run: docker build -t tour-project:latest .
+
+    - name: Copy project to remote VM
+      uses: appleboy/scp-action@v0.1.5
+      with:
+        host: ${{ secrets.VM_IP }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        port: 22
+        source: "."
+        target: "~/tour-project"
+
+    - name: Deploy Docker container on remote VM
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.VM_IP }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.VM_SSH_KEY }}
+        port: 22
+        script: |
+          docker stop tour-project || true
+          docker rm tour-project || true
+          docker run -d --name tour-project -p 8088:8088 ~/tour-project
