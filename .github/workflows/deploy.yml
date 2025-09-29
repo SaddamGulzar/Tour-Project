@@ -10,41 +10,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      # Checkout the repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Copy project to remote VM
-      uses: appleboy/scp-action@v0.1.5
-      with:
-        host: ${{ secrets.VM_IP }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        port: 22
-        source: "."
-        target: "~/tour-project"
+      # Copy project to remote VM
+      - name: Copy project to remote VM
+        uses: appleboy/scp-action@v0.1.5
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          source: "."
+          target: "~/tour-project"
 
-    - name: Deploy Docker container on remote VM
-      uses: appleboy/ssh-action@v0.1.5
-      with:
-        host: ${{ secrets.VM_IP }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        port: 22
-        script: |
-          cd ~/tour-project
+      # Deploy Docker container on VM
+      - name: Deploy Docker container on remote VM
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            cd ~/tour-project
 
-          # Stop & remove any container named 'tour-project' (running or stopped)
-          CONTAINER_ID=$(docker ps -aq -f name=tour-project)
-          if [ -n "$CONTAINER_ID" ]; then
-            docker stop tour-project || true
-            docker rm tour-project || true
-          fi
+            # Stop & remove any container named 'tour-project' (running or stopped)
+            CONTAINER_ID=$(docker ps -aq -f name=tour-project)
+            if [ -n "$CONTAINER_ID" ]; then
+              echo "Stopping existing container..."
+              docker stop tour-project || true
+              docker rm tour-project || true
+            fi
 
-          # Build new Docker image
-          docker build -t tour-project:latest .
+            # Build new Docker image
+            echo "Building Docker image..."
+            docker build -t tour-project:latest .
 
-          # Run container on port 8088
-          docker run -d --name tour-project -p 8088:8088 tour-project:latest
+            # Run container on port 8088
+            echo "Running new container..."
+            docker run -d --name tour-project -p 8088:8088 tour-project:latest
 
-          # Optional: clean up dangling images to save space
-          docker image prune -f
+            # Optional: clean up dangling images
+            docker image prune -f
